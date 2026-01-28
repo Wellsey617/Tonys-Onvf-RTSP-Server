@@ -725,20 +725,24 @@ class MediaMTXManager:
             def capture_output(process):
                 for line in process.stdout:
                     if line:
+                        # Check if it's a spammy ffmpeg status line
+                        # ffmpeg status lines contain "frame=" and "fps="
+                        is_ffmpeg_status = "frame=" in line and "fps=" in line
+
+                        # Optimization: Skip processing status lines entirely if not debugging
+                        # This prevents lock contention and high CPU usage from log spam
+                        if not self.debug_mode and is_ffmpeg_status:
+                            continue
+
                         # Update buffer
                         with self._log_lock:
                             self.log_buffer.append(line.strip())
                             if len(self.log_buffer) > 100:
                                 self.log_buffer.pop(0)
                         
-                        # Only write to console if debug mode is ON OR it's not a spammy ffmpeg status line
-                        # ffmpeg status lines contain "frame=" and "fps="
-                        is_ffmpeg_status = "frame=" in line and "fps=" in line
-                        
-                        if self.debug_mode or not is_ffmpeg_status:
-                            # Write to sys.stdout so our Logger captures it
-                            sys.stdout.write(line)
-                            sys.stdout.flush()
+                        # Write to sys.stdout so our Logger captures it
+                        sys.stdout.write(line)
+                        sys.stdout.flush()
             
             output_thread = threading.Thread(target=capture_output, args=(self.process,), daemon=True)
             output_thread.start()

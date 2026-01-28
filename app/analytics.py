@@ -102,6 +102,14 @@ class AnalyticsManager:
             
             new_analytics[name] = analytics
             
+        # Clean up history for paths that no longer exist
+        # This prevents memory leaks if stream names change over time
+        current_paths = set(new_analytics.keys())
+        history_paths = list(self._history.keys())
+        for path in history_paths:
+            if path not in current_paths:
+                del self._history[path]
+
         with self._lock:
             self.data = new_analytics
             self.last_poll_time = current_time
