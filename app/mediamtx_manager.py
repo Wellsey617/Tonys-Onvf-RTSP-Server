@@ -572,9 +572,28 @@ class MediaMTXManager:
                             else:
                                 print(f"      Hardware acceleration enabled but not detected. Falling back to software.")
                         
+                        # Prepare global args for this command
+                        current_ff_global = ff_global
+
+                        output_map_label = "[outv]"
+
                         # Determine encoder arguments
                         if use_hw_accel and hw_accel_info:
                              encoder_args = f'-c:v {hw_accel_info["encoder"]} {hw_accel_info["params"]}'
+
+                             # Handle VAAPI device initialization
+                             if hw_accel_info['type'] == 'vaapi':
+                                 import glob
+                                 render_devs = glob.glob("/dev/dri/renderD*")
+                                 device = render_devs[0] if render_devs else "/dev/dri/renderD128"
+
+                                 if "-init_hw_device" not in current_ff_global:
+                                     current_ff_global = f'-init_hw_device vaapi=va:{device} -filter_hw_device va {current_ff_global}'
+
+                                 # Add hardware upload filter
+                                 filter_complex += f";{output_map_label}format=nv12,hwupload[outv_hw]"
+                                 output_map_label = "[outv_hw]"
+
                         else:
                              # Software encoding with optimized preset
                              encoder_args = '-c:v libx264 -preset veryfast -tune zerolatency'
@@ -583,11 +602,11 @@ class MediaMTXManager:
                         # -threads 0: Auto-detect and use all available CPU cores
                         # -filter_complex_threads 0: Parallelize filter graph processing across cores
                         gf_cmd = (
-                            f'"{ffmpeg_exe}" {ff_global} -nostdin -stats '
+                            f'"{ffmpeg_exe}" {current_ff_global} -nostdin -stats '
                             f'{" ".join(inputs)} '
                             f'-filter_complex "{filter_complex}" '
                             f'-filter_complex_threads 0 '
-                            f'-map "[outv]" '
+                            f'-map "{output_map_label}" '
                             f'{encoder_args} '
                             f'-profile:v high -level 4.2 '
                             f'-threads 0 '
@@ -656,7 +675,16 @@ class MediaMTXManager:
                     "name": "AMD AMF",
                     "type": "amf",
                     "encoder": "h264_amf",
-                    "params": "-usage ultra_low_latency -quality speed -rc cqp"
+                    "params": "-usage ultra_low_latency -quality speed -rc vbr_latency"
+                }
+
+            # Check for VAAPI (AMD/Intel)
+            if "h264_vaapi" in stdout:
+                return {
+                    "name": "VAAPI",
+                    "type": "vaapi",
+                    "encoder": "h264_vaapi",
+                    "params": "" # Removed -vf to avoid conflict with filter_complex
                 }
                 
             return None
