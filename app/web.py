@@ -34,6 +34,7 @@ def create_web_app(manager):
     # Initialize stats tracking
     app.stats_last_time = time.time()
     app.stats_last_cpu = 0
+    app.current_process = psutil.Process(os.getpid())
     
     import logging
     log = logging.getLogger('werkzeug')
@@ -214,14 +215,21 @@ def create_web_app(manager):
         """Get CPU and memory usage for the app and its children using delta timings"""
         try:
             current_time = time.time()
-            parent = psutil.Process(os.getpid())
+            # Reuse the process object to avoid recreating it every poll (expensive /proc reads)
+            parent = app.current_process
             
             # Memory (snapshot)
-            memory_info = parent.memory_info().rss
-            # CPU Times (cumulative)
-            total_cpu_time = parent.cpu_times().user + parent.cpu_times().system
+            try:
+                memory_info = parent.memory_info().rss
+                # CPU Times (cumulative)
+                total_cpu_time = parent.cpu_times().user + parent.cpu_times().system
+            except psutil.NoSuchProcess:
+                # Should not happen for own process, but safety first
+                app.current_process = psutil.Process(os.getpid())
+                return jsonify({'cpu_percent': 0.0, 'memory_mb': 0.0})
             
             # Sum up all children recursively
+            # Note: parent.children() calls /proc every time, but at least we save the parent init
             for child in parent.children(recursive=True):
                 try:
                     memory_info += child.memory_info().rss
