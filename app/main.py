@@ -1,11 +1,13 @@
 import sys
+import os
 import time
+import datetime
 import threading
 import webbrowser
 from .utils import cleanup_stale_processes
 from .manager import CameraManager
 from .linux_network import LinuxNetworkManager
-from .config import WEB_UI_PORT, MEDIAMTX_PORT
+from .config import WEB_UI_PORT, MEDIAMTX_PORT, ROOT_DIR
 from .web import create_web_app
 from .version import CURRENT_VERSION
 from .updater import check_for_updates
@@ -123,6 +125,34 @@ def main():
     
     try:
         while True:
+            # Scheduled Reset at 3am
+            now = datetime.datetime.now()
+            if now.hour == 3 and now.minute == 0:
+                today_str = now.strftime('%Y-%m-%d')
+                last_reset_path = os.path.join(ROOT_DIR, 'last_reset.txt')
+
+                should_reset = True
+                if os.path.exists(last_reset_path):
+                    try:
+                        with open(last_reset_path, 'r') as f:
+                            if f.read().strip() == today_str:
+                                should_reset = False
+                    except:
+                        pass # If read fails, assume we need to reset/update
+
+                if should_reset:
+                    try:
+                        with open(last_reset_path, 'w') as f:
+                            f.write(today_str)
+                        print(f"\n[{now}] Performing scheduled daily reset...")
+                        # Stop MediaMTX cleanly
+                        if hasattr(manager, 'mediamtx'):
+                            manager.mediamtx.stop()
+                        # Exit with code 1 to trigger systemd restart (Restart=always/on-failure)
+                        sys.exit(1)
+                    except Exception as e:
+                        print(f"Error performing scheduled reset: {e}")
+
             time.sleep(1)
             
     except KeyboardInterrupt:

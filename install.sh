@@ -525,7 +525,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/tonys-onvif-server
 ExecStart=/opt/tonys-onvif-server/venv/bin/python /opt/tonys-onvif-server/run.py
-Restart=on-failure
+Restart=always
 RestartSec=5
 LimitNOFILE=65535
 
