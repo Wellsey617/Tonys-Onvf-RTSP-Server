@@ -49,7 +49,6 @@ class ONVIFProber:
             if not os.path.exists(os.path.join(wsdl_dir, 'devicemgmt.wsdl')):
                 # Search for WSDLs in common separated locations
                 possible_paths = [
-                    r"C:\Users\Tony\AppData\Roaming\Python\Lib\site-packages\wsdl",
                     os.path.join(os.path.dirname(os.path.dirname(onvif.__file__)), 'wsdl'),
                     # Try three levels up + Lib/site-packages/wsdl (common in some user installs)
                     os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(onvif.__file__))), 'Lib', 'site-packages', 'wsdl'),

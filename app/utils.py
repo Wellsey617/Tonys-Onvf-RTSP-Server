@@ -4,6 +4,8 @@ import importlib.util
 import platform
 import collections
 import threading
+import re
+from urllib.parse import urlparse
 
 class Logger:
     def __init__(self, max_lines=2000):
@@ -154,3 +156,43 @@ def cleanup_stale_processes():
             
     except Exception as e:
         print(f"  Warning: Could not check/clean stale processes: {e}")
+
+
+def validate_hostname_or_ip(host):
+    """
+    Validate that the host is a valid hostname or IP address.
+    Disallow flags (starting with -) or shell metacharacters.
+    """
+    if not host or not isinstance(host, str):
+        return False
+
+    # Reject potential flags
+    if host.startswith('-'):
+        return False
+
+    # Check length
+    if len(host) > 255:
+        return False
+
+    # Allowed characters: alphanumeric, dot, hyphen, underscore (sometimes used), colon (IPv6)
+    # This regex covers IP addresses (v4/v6) and domain names
+    # It strictly disallows spaces, semicolons, etc.
+    pattern = r'^[a-zA-Z0-9\.\-\_\:]+$'
+    return bool(re.match(pattern, host))
+
+def validate_stream_url(url):
+    """
+    Validate stream URL protocol.
+    Only allow rtsp, rtsps, http, https, tcp, udp.
+    """
+    if not url or not isinstance(url, str):
+        return False
+
+    try:
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower()
+        if scheme in ['rtsp', 'rtsps', 'http', 'https', 'tcp', 'udp']:
+            return True
+        return False
+    except:
+        return False

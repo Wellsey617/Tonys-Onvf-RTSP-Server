@@ -15,7 +15,7 @@ from .diagnostics_template import get_diagnostics_html
 from .ffmpeg_manager import FFmpegManager
 from .onvif_client import ONVIFProber
 from .linux_network import LinuxNetworkManager
-from .utils import get_captured_logs
+from .utils import get_captured_logs, validate_hostname_or_ip, validate_stream_url
 from .updater import UpdateChecker, check_for_updates, download_and_apply_update
 import subprocess
 import tempfile
@@ -46,6 +46,12 @@ def create_web_app(manager):
     def login_required(f):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
+            # Enforce setup if required
+            if manager.is_setup_required():
+                if request.is_json:
+                     return jsonify({'error': 'Setup required', 'setup_required': True}), 401
+                return redirect(url_for('setup'))
+
             if not manager.auth_enabled:
                 return f(*args, **kwargs)
                 
@@ -423,6 +429,9 @@ def create_web_app(manager):
         # Get the appropriate stream URL
         stream_url = camera.main_stream_url if stream_type == 'main' else camera.sub_stream_url
         
+        if not validate_stream_url(stream_url):
+            return jsonify({'error': 'Invalid stream URL protocol stored in camera config.'}), 400
+
         try:
             # Use ffprobe to get stream information
             
@@ -940,6 +949,9 @@ def create_web_app(manager):
         if not host:
             return jsonify({'success': False, 'error': 'Host required'}), 400
             
+        if not validate_hostname_or_ip(host):
+            return jsonify({'success': False, 'error': 'Invalid hostname or IP address'}), 400
+
         try:
             # -n on Windows, -c on Linux
             param = '-n' if sys.platform.startswith('win') else '-c'
@@ -962,6 +974,9 @@ def create_web_app(manager):
         if not host:
             return jsonify({'success': False, 'error': 'Host required'}), 400
             
+        if not validate_hostname_or_ip(host):
+            return jsonify({'success': False, 'error': 'Invalid hostname or IP address'}), 400
+
         try:
             # tracert on Windows, traceroute on Linux
             cmd_name = 'tracert' if sys.platform.startswith('win') else 'traceroute'
@@ -1005,6 +1020,9 @@ def create_web_app(manager):
         if not url:
             return jsonify({'success': False, 'error': 'URL required'}), 400
             
+        if not validate_stream_url(url):
+            return jsonify({'success': False, 'error': 'Invalid stream URL protocol. Only rtsp, rtsps, http, https, tcp, udp are allowed.'}), 400
+
         try:
             ffmpeg_mgr = FFmpegManager()
             ffprobe_exe = ffmpeg_mgr.get_ffprobe_path()
