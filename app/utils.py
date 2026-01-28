@@ -133,29 +133,65 @@ def check_and_install_system_dependencies():
     print("     Please install it manually: sudo apt-get install isc-dhcp-client")
 
 def cleanup_stale_processes():
-    """Kill any existing MediaMTX instances to prevent port conflicts"""
+    """Kill any existing MediaMTX and FFmpeg instances to prevent conflicts/leaks"""
     print("Checking for stale processes...")
+
+    # Try using psutil first (better matching)
     try:
-        if platform.system() == "Windows":
-            # Check if mediamtx.exe is running
-            output = subprocess.check_output("tasklist /FI \"IMAGENAME eq mediamtx.exe\"", shell=True, text=True)
-            if "mediamtx.exe" in output:
-                print("  Found stale mediamtx.exe, terminating...")
-                subprocess.run("taskkill /F /IM mediamtx.exe", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print("  Stale mediamtx.exe terminated")
-        else:
-            # Linux/Mac
+        import psutil
+
+        # Define targets to kill
+        targets = ['mediamtx', 'mediamtx.exe', 'ffmpeg', 'ffmpeg.exe']
+
+        killed_count = 0
+        for proc in psutil.process_iter(['pid', 'name', 'exe']):
             try:
-                # Check if running first to provide feedback
-                subprocess.check_call(["pgrep", "mediamtx"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print("  Found stale mediamtx, terminating...")
-                subprocess.run(["pkill", "-9", "mediamtx"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print("  Stale mediamtx terminated")
-            except subprocess.CalledProcessError:
-                pass  # Not running
+                # Check name
+                name = proc.info['name'].lower() if proc.info['name'] else ""
+
+                # Check if matches target
+                matches = False
+                if name in targets:
+                    matches = True
+
+                if matches:
+                    print(f"  Found stale process: {name} (PID: {proc.info['pid']})")
+                    proc.kill()
+                    killed_count += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        if killed_count > 0:
+            print(f"  Cleaned up {killed_count} stale processes.")
             
-    except Exception as e:
-        print(f"  Warning: Could not check/clean stale processes: {e}")
+    except ImportError:
+        # Fallback to subprocess method if psutil not available (e.g. first run)
+        try:
+            if platform.system() == "Windows":
+                # Check if mediamtx.exe is running
+                output = subprocess.check_output("tasklist /FI \"IMAGENAME eq mediamtx.exe\"", shell=True, text=True)
+                if "mediamtx.exe" in output:
+                    print("  Found stale mediamtx.exe, terminating...")
+                    subprocess.run("taskkill /F /IM mediamtx.exe", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+                # Check if ffmpeg.exe is running
+                output = subprocess.check_output("tasklist /FI \"IMAGENAME eq ffmpeg.exe\"", shell=True, text=True)
+                if "ffmpeg.exe" in output:
+                    print("  Found stale ffmpeg.exe, terminating...")
+                    subprocess.run("taskkill /F /IM ffmpeg.exe", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                # Linux/Mac
+                for process in ["mediamtx", "ffmpeg"]:
+                    try:
+                        # Check if running first to provide feedback
+                        subprocess.check_call(["pgrep", process], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        print(f"  Found stale {process}, terminating...")
+                        subprocess.run(["pkill", "-9", process], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    except subprocess.CalledProcessError:
+                        pass  # Not running
+
+        except Exception as e:
+            print(f"  Warning: Could not check/clean stale processes: {e}")
 
 
 def validate_hostname_or_ip(host):
