@@ -759,38 +759,8 @@ class MediaMTXManager:
             return False
 
     def stop(self):
-        """Stop MediaMTX server and all its child processes"""
+        """Stop MediaMTX server"""
         if self.process:
-            print("Stopping MediaMTX and cleaning up processes...")
-
-            # Try to kill children (FFmpeg processes) first
-            try:
-                import psutil
-                parent = psutil.Process(self.process.pid)
-                children = parent.children(recursive=True)
-
-                if children:
-                    print(f"  Found {len(children)} child processes (FFmpeg) to terminate...")
-                    for child in children:
-                        try:
-                            child.terminate()
-                        except:
-                            pass
-
-                    # Wait for them to die
-                    _, alive = psutil.wait_procs(children, timeout=3)
-
-                    # Force kill stragglers
-                    for p in alive:
-                        try:
-                            print(f"  Force killing PID {p.pid}")
-                            p.kill()
-                        except:
-                            pass
-            except Exception as e:
-                print(f"  Warning: Process cleanup error: {e}")
-
-            # Now stop the main process
             self.process.terminate()
             try:
                 self.process.wait(timeout=5)
