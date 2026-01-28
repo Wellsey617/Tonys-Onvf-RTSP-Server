@@ -14,6 +14,9 @@ class AnalyticsManager:
         self.thread = None
         self._lock = threading.Lock()
         
+        # Reusable session for polling
+        self.session = requests.Session()
+
         # History for bitrate calculation
         # { path_name: { 'bytesReceived': val, 'time': val } }
         self._history = {}
@@ -32,6 +35,8 @@ class AnalyticsManager:
         self.running = False
         if self.thread:
             self.thread.join(timeout=1)
+        if self.session:
+            self.session.close()
 
     def _run(self):
         """Main polling loop"""
@@ -46,11 +51,21 @@ class AnalyticsManager:
     def _poll(self):
         """Poll MediaMTX for path statistics"""
         url = f"http://127.0.0.1:{MEDIAMTX_API_PORT}/v3/paths/list"
-        response = requests.get(url, timeout=2)
-        if response.status_code != 200:
-            return
 
-        json_data = response.json()
+        try:
+            response = self.session.get(url, timeout=2)
+            if response.status_code != 200:
+                return
+
+            json_data = response.json()
+        except requests.exceptions.RequestException:
+            # Recreate session on error to ensure clean state
+            try:
+                self.session.close()
+            except:
+                pass
+            self.session = requests.Session()
+            raise
         current_time = time.time()
         
         new_analytics = {}
