@@ -90,17 +90,21 @@ def main():
     web_app = create_web_app(manager)
     
     print(f"\nStarting Web UI on http://localhost:{WEB_UI_PORT}")
-    web_thread = threading.Thread(
-        target=lambda: web_app.run(
-            host='0.0.0.0', 
-            port=WEB_UI_PORT, 
-            debug=False, 
-            use_reloader=False,
-            threaded=True  # Enable threading for better concurrency
-        ),
-        daemon=True
-    )
-    web_thread.start()
+
+    # Use werkzeug's make_server for better control (and clean shutdown capability)
+    from werkzeug.serving import make_server
+    try:
+        web_server = make_server('0.0.0.0', WEB_UI_PORT, web_app, threaded=True)
+        manager.web_server = web_server # Store ref
+
+        web_thread = threading.Thread(
+            target=web_server.serve_forever,
+            daemon=True
+        )
+        web_thread.start()
+    except OSError as e:
+        print(f"Error starting Web UI: {e}")
+        sys.exit(1)
     
     time.sleep(2)
     

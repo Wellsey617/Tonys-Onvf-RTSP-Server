@@ -736,9 +736,19 @@ class CameraManager:
         # Wait for system to stabilize
         time.sleep(30)
         
+        # Import here to avoid circular imports or early init
+        import psutil
+        process = psutil.Process(os.getpid())
+
         while self._watchdog_running:
             try:
                 self._check_stream_health()
+
+                # Log health metrics for diagnosis
+                mem_usage = process.memory_info().rss / (1024 * 1024)
+                thread_count = threading.active_count()
+                child_count = len(process.children())
+                print(f"[Health] Mem: {mem_usage:.1f}MB | Threads: {thread_count} | Children: {child_count}")
 
                 # Force garbage collection to combat memory fragmentation in long-running processes
                 # This helps prevent the "memory creep" often seen with Flask/Requests/FFmpeg integration
