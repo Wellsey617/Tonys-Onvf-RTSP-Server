@@ -6,7 +6,7 @@ from .config import MEDIAMTX_API_PORT
 class AnalyticsManager:
     """Polls MediaMTX API for real-time stream analytics"""
     
-    def __init__(self, poll_interval=5):
+    def __init__(self, poll_interval=3):
         self.poll_interval = poll_interval
         self.data = {}
         self.last_poll_time = 0
