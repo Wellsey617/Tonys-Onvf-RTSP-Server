@@ -741,7 +741,7 @@ class CameraManager:
             except Exception as e:
                 print(f"Watchdog error: {e}")
             
-            time.sleep(15) # Check every 15 seconds
+            time.sleep(60) # Check every 60 seconds
 
     def _check_stream_health(self):
         """Check for hung streams and perform recovery"""
