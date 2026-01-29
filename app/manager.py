@@ -5,6 +5,7 @@ import sys
 import threading
 import tempfile
 import secrets
+import gc
 import string
 from pathlib import Path
 from urllib.parse import quote
@@ -738,6 +739,10 @@ class CameraManager:
         while self._watchdog_running:
             try:
                 self._check_stream_health()
+
+                # Force garbage collection to combat memory fragmentation in long-running processes
+                # This helps prevent the "memory creep" often seen with Flask/Requests/FFmpeg integration
+                gc.collect()
             except Exception as e:
                 print(f"Watchdog error: {e}")
             
