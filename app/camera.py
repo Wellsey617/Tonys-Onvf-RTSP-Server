@@ -4,6 +4,7 @@ import socket
 import time
 import uuid
 import hashlib
+from werkzeug.serving import make_server
 from .config import MEDIAMTX_PORT
 from .onvif_service import ONVIFService
 from .linux_network import LinuxNetworkManager
@@ -113,15 +114,16 @@ class VirtualONVIFCamera:
         # Use assigned IP if available, otherwise 0.0.0.0
         bind_ip = self.assigned_ip if self.assigned_ip else '0.0.0.0'
         
-        # Run Flask in a separate thread with threading enabled for stability
+        # Create a proper WSGI server so we can shut it down cleanly
+        try:
+            self.server = make_server(bind_ip, self.onvif_port, app, threaded=True)
+        except OSError as e:
+            print(f"  Error starting ONVIF service on port {self.onvif_port}: {e}")
+            return
+
+        # Run server in a separate thread
         self.flask_thread = threading.Thread(
-            target=lambda: app.run(
-                host=bind_ip, 
-                port=self.onvif_port, 
-                debug=False, 
-                use_reloader=False,
-                threaded=True  # Enable threading for concurrent requests
-            ),
+            target=self.server.serve_forever,
             daemon=True
         )
         self.flask_thread.start()
