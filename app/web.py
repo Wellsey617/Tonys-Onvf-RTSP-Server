@@ -35,6 +35,7 @@ def create_web_app(manager):
     app.stats_last_time = time.time()
     app.stats_last_cpu = 0
     app.current_process = psutil.Process(os.getpid())
+    app.stats_cache = {'time': 0, 'data': None}
     
     import logging
     log = logging.getLogger('werkzeug')
@@ -215,26 +216,40 @@ def create_web_app(manager):
         """Get CPU and memory usage for the app and its children using delta timings"""
         try:
             current_time = time.time()
+
+            # Return cached response if within 2 seconds
+            if app.stats_cache['data'] and (current_time - app.stats_cache['time'] < 2):
+                return jsonify(app.stats_cache['data'])
+
             # Reuse the process object to avoid recreating it every poll (expensive /proc reads)
             parent = app.current_process
             
             # Memory (snapshot)
             try:
-                memory_info = parent.memory_info().rss
-                # CPU Times (cumulative)
-                total_cpu_time = parent.cpu_times().user + parent.cpu_times().system
+                # Use oneshot to minimize system calls
+                with parent.oneshot():
+                    memory_info = parent.memory_info().rss
+                    # CPU Times (cumulative)
+                    total_cpu_time = parent.cpu_times().user + parent.cpu_times().system
             except psutil.NoSuchProcess:
                 # Should not happen for own process, but safety first
                 app.current_process = psutil.Process(os.getpid())
                 return jsonify({'cpu_percent': 0.0, 'memory_mb': 0.0})
+            except Exception:
+                # Fallback if oneshot fails
+                memory_info = parent.memory_info().rss
+                total_cpu_time = parent.cpu_times().user + parent.cpu_times().system
             
             # Sum up all children recursively
-            # Note: parent.children() calls /proc every time, but at least we save the parent init
+            # Note: parent.children() calls /proc every time
             for child in parent.children(recursive=True):
                 try:
-                    memory_info += child.memory_info().rss
-                    total_cpu_time += child.cpu_times().user + child.cpu_times().system
+                    with child.oneshot():
+                        memory_info += child.memory_info().rss
+                        total_cpu_time += child.cpu_times().user + child.cpu_times().system
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+                except Exception:
                     continue
             
             # Calculate delta since last request
@@ -254,11 +269,18 @@ def create_web_app(manager):
             else:
                 cpu_percent = 0.0
             
-            return jsonify({
+            result = {
                 'cpu_percent': min(100.0, round(max(0.0, cpu_percent), 1)),
                 'memory_mb': round(memory_info / (1024 * 1024), 1)
-            })
+            }
+
+            # Update cache
+            app.stats_cache['time'] = current_time
+            app.stats_cache['data'] = result
+
+            return jsonify(result)
         except Exception as e:
+            print(f"Stats error: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/analytics')
