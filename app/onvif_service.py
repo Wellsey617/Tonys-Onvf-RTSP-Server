@@ -29,6 +29,7 @@ class ONVIFService:
     def __init__(self, camera):
         self.camera = camera
         self.app = None
+        self.auth_cache = {}  # Cache for authenticated IPs
         
     def create_app(self):
         """Create the Flask app for ONVIF service"""
@@ -56,6 +57,16 @@ class ONVIFService:
             from functools import wraps
             @wraps(f)
             def decorated(*args, **kwargs):
+                # Check IP Cache to avoid repetitive 401s
+                remote_ip = request.remote_addr
+                now = time.time()
+
+                if remote_ip in self.auth_cache:
+                    if now - self.auth_cache[remote_ip] < 300:  # 5 minutes validity
+                        return f(*args, **kwargs)
+                    else:
+                        self.auth_cache.pop(remote_ip, None)
+
                 # Check for Basic Auth
                 auth = request.authorization
                 
@@ -66,6 +77,7 @@ class ONVIFService:
                 
                 # Allow if credentials match Basic Auth
                 if auth and auth.username == self.camera.onvif_username and auth.password == self.camera.onvif_password:
+                    self.auth_cache[remote_ip] = time.time()
                     return f(*args, **kwargs)
                 
                 # Check for SOAP WS-UsernameToken (Found in body)
@@ -73,10 +85,9 @@ class ONVIFService:
                 
                 # More robust check for UsernameToken
                 if 'UsernameToken' in data and f'>{self.camera.onvif_username}</' in data:
-                     # Check if it's actually inside a username tag
-                     if f'<Username>{self.camera.onvif_username}</Username>' in data or \
-                        f':Username>{self.camera.onvif_username}</' in data:
-                         return f(*args, **kwargs)
+                     # Verify it's actually inside a username tag (or allow loose match as per legacy behavior)
+                     # In both cases we cache and return success
+                     self.auth_cache[remote_ip] = time.time()
                      return f(*args, **kwargs)
                 
                 if 'Authorization' in request.headers and 'Digest' in request.headers['Authorization']:

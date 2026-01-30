@@ -4,10 +4,33 @@ import socket
 import time
 import uuid
 import hashlib
-from werkzeug.serving import make_server
+from werkzeug.serving import BaseWSGIServer
+from concurrent.futures import ThreadPoolExecutor
 from .config import MEDIAMTX_PORT
 from .onvif_service import ONVIFService
 from .linux_network import LinuxNetworkManager
+
+class ThreadPoolWSGIServer(BaseWSGIServer):
+    """Custom WSGI Server that uses a ThreadPoolExecutor to limit threads"""
+    def __init__(self, host, port, app, max_workers=20, **kwargs):
+        super().__init__(host, port, app, **kwargs)
+        self.pool = ThreadPoolExecutor(max_workers=max_workers)
+
+    # Override process_request to use the thread pool
+    def process_request(self, request, client_address):
+        self.pool.submit(self.process_request_thread, request, client_address)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            self.finish_request(request, client_address)
+            self.shutdown_request(request)
+        except Exception:
+            self.handle_error(request, client_address)
+            self.shutdown_request(request)
+
+    def server_close(self):
+        super().server_close()
+        self.pool.shutdown(wait=False)
 
 class VirtualONVIFCamera:
     """Represents a virtual ONVIF camera"""
@@ -133,7 +156,8 @@ class VirtualONVIFCamera:
         
         # Create a proper WSGI server so we can shut it down cleanly
         try:
-            self.server = make_server(bind_ip, self.onvif_port, app, threaded=True)
+            # Use ThreadPoolWSGIServer to limit thread creation (mitigate thread leaks)
+            self.server = ThreadPoolWSGIServer(bind_ip, self.onvif_port, app, max_workers=20)
         except OSError as e:
             print(f"  Error starting ONVIF service on port {self.onvif_port}: {e}")
             return
