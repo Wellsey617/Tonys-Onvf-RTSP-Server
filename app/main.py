@@ -11,6 +11,7 @@ from .config import WEB_UI_PORT, MEDIAMTX_PORT, ROOT_DIR
 from .web import create_web_app
 from .version import CURRENT_VERSION
 from .updater import check_for_updates
+from werkzeug.serving import make_server
 
 def main():
     """Main application entry point"""
@@ -90,14 +91,16 @@ def main():
     web_app = create_web_app(manager)
     
     print(f"\nStarting Web UI on http://localhost:{WEB_UI_PORT}")
+
+    def run_web_server():
+        try:
+            server = make_server('0.0.0.0', WEB_UI_PORT, web_app, threaded=True)
+            server.serve_forever()
+        except Exception as e:
+            print(f"Error starting Web UI: {e}")
+
     web_thread = threading.Thread(
-        target=lambda: web_app.run(
-            host='0.0.0.0', 
-            port=WEB_UI_PORT, 
-            debug=False, 
-            use_reloader=False,
-            threaded=True  # Enable threading for better concurrency
-        ),
+        target=run_web_server,
         daemon=True
     )
     web_thread.start()

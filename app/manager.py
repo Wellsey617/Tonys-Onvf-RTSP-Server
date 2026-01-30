@@ -7,6 +7,7 @@ import tempfile
 import secrets
 import gc
 import string
+import psutil
 from pathlib import Path
 from urllib.parse import quote
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -743,10 +744,24 @@ class CameraManager:
                 # Force garbage collection to combat memory fragmentation in long-running processes
                 # This helps prevent the "memory creep" often seen with Flask/Requests/FFmpeg integration
                 gc.collect()
+
+                # Log health metrics
+                try:
+                    process = psutil.Process()
+                    memory_info = process.memory_info()
+                    rss_mb = memory_info.rss / 1024 / 1024
+
+                    threads_count = threading.active_count()
+                    children_count = len(process.children(recursive=True))
+
+                    print(f"Health Check: RSS={rss_mb:.1f}MB, Threads={threads_count}, Children={children_count}")
+                except Exception as e:
+                    print(f"Error logging health metrics: {e}")
+
             except Exception as e:
                 print(f"Watchdog error: {e}")
             
-            time.sleep(15) # Check every 15 seconds
+            time.sleep(60) # Check every 60 seconds
 
     def _check_stream_health(self):
         """Check for hung streams and perform recovery"""

@@ -55,6 +55,7 @@ class VirtualONVIFCamera:
         self.flask_app = None
         self.flask_thread = None
         self.onvif_service = None
+        self.server = None
 
     @property
     def mac_address(self):
@@ -94,6 +95,22 @@ class VirtualONVIFCamera:
         """Mark camera as stopped and cleanup networking"""
         self.status = "stopped"
         
+        # Shutdown ONVIF service server
+        if self.server:
+            try:
+                self.server.shutdown()
+            except Exception as e:
+                print(f"Error shutting down ONVIF server for {self.name}: {e}")
+            self.server = None
+
+        # Join thread
+        if self.flask_thread and self.flask_thread.is_alive():
+            try:
+                self.flask_thread.join(timeout=2)
+            except:
+                pass
+            self.flask_thread = None
+
         # Cleanup Virtual NIC
         if self.use_virtual_nic and self.network_mgr:
             vnic_name = f"vnic_{self.path_name[:10]}"
