@@ -8,7 +8,7 @@ import re
 from urllib.parse import urlparse
 
 class Logger:
-    def __init__(self, max_lines=2000):
+    def __init__(self, max_lines=1000):
         self._buffer = collections.deque(maxlen=max_lines)
         self._lock = threading.Lock()
         self._stdout = sys.stdout

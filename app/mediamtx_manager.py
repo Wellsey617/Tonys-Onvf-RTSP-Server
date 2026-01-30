@@ -725,14 +725,12 @@ class MediaMTXManager:
             def capture_output(process):
                 for line in process.stdout:
                     if line:
-                        # Check if it's a spammy ffmpeg status line
-                        # ffmpeg status lines contain "frame=" and "fps="
-                        is_ffmpeg_status = "frame=" in line and "fps=" in line
-
-                        # Optimization: Skip processing status lines entirely if not debugging
-                        # This prevents lock contention and high CPU usage from log spam
-                        if not self.debug_mode and is_ffmpeg_status:
-                            continue
+                        # Aggressive filtering when not in debug mode
+                        if not self.debug_mode:
+                            lower_line = line.lower()
+                            # Only allow important messages
+                            if "error" not in lower_line and "warn" not in lower_line and "panic" not in lower_line and "fatal" not in lower_line:
+                                continue
 
                         # Update buffer
                         with self._log_lock:

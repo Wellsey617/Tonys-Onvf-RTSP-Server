@@ -222,6 +222,8 @@ def create_web_app(manager):
                 return jsonify(app.stats_cache['data'])
 
             # Reuse the process object to avoid recreating it every poll (expensive /proc reads)
+            if not app.current_process or not app.current_process.is_running():
+                app.current_process = psutil.Process(os.getpid())
             parent = app.current_process
             
             # Memory (snapshot)
@@ -242,15 +244,20 @@ def create_web_app(manager):
             
             # Sum up all children recursively
             # Note: parent.children() calls /proc every time
-            for child in parent.children(recursive=True):
-                try:
-                    with child.oneshot():
-                        memory_info += child.memory_info().rss
-                        total_cpu_time += child.cpu_times().user + child.cpu_times().system
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-                except Exception:
-                    continue
+            # Limit depth or handle specifically if needed, but recursive is usually correct for process tree
+            try:
+                children = parent.children(recursive=True)
+                for child in children:
+                    try:
+                        with child.oneshot():
+                            memory_info += child.memory_info().rss
+                            total_cpu_time += child.cpu_times().user + child.cpu_times().system
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                    except Exception:
+                        continue
+            except Exception:
+                pass
             
             # Calculate delta since last request
             delta_time = current_time - app.stats_last_time
